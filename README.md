@@ -5,7 +5,8 @@ DeepSeek Harness 提示词美化插件：输入框旁一键把草稿改写成更
 [English](./README.en.md)
 
 - **不发送、不计入对话**：命令与按钮都不产生 model message，美化的输入和结果都不进会话历史，也不占主对话 token。
-- **继承当前模型**：辅助请求优先用本会话最近一次请求的 provider/model，其次是 profile 里 `agent-default-model` 的当前选择；候选路由按顺序尝试，前一档不可用会自动换下一档。
+- **跟随当前模型**：辅助请求用本会话**当前选中**的 provider/model——也就是输入框模型选择器显示的那一个；在会话里切换模型后，下一次美化立刻用新模型，不用先发一条消息。优先读会话的 `modelSelection` 投影，其次才是最近一次请求头，最后才是 profile 里 `agent-default-model` 的当前选择；候选路由按顺序尝试，前一档不可用会自动换下一档。
+- **读会话上下文**：默认把本会话最近几轮对话（只取用户/助手正文，跳过图片与工具输出）作为背景，让改写能消解「这个/上面那个」这类指代、补上你刚说过的约束；默认读最近 6 轮、最多 6000 字符，可用 `useContext: false` 关掉。
 - **零第三方依赖**：宿主只用 `commands` 与 `llm` 两个服务；客户端是手写懒加载 CJS bundle，不 import 任何 `@deepseek-ai/dsh-client-*`。
 
 ## 用法
@@ -30,15 +31,20 @@ DeepSeek Harness 提示词美化插件：输入框旁一键把草稿改写成更
 ```yaml
 - id: prompt-beautify
   config:
-    # 固定路由（省略则继承当前会话模型）
+    # 固定路由（省略则跟随当前会话模型）
     # provider: ds
     # model: deepseek-v4.1-flash-1017
     maxInputChars: 8000   # 草稿字符上限，超过直接报错不请求
     maxTokens: 2048       # 改写结果 token 上限
     timeoutMs: 180000     # 整次改写的硬上限（毫秒）
     idleTimeoutMs: 90000  # 已开始出字后，多久没有新内容算卡死
+    useContext: true      # 是否带上本会话最近几轮对话作为背景
+    contextRounds: 6      # 上下文最多取最近几轮（一轮 = 用户 + 助手）
+    contextChars: 6000    # 上下文最多多少字符，超出从最早的往前截
     # traceFile: C:\path\to\polish.log   # 排障开关：每次 apply 追加一行，确认插件被装载
 ```
+
+上下文只取 `user` / `assistant` 消息里的文本块：图片、工具调用、工具输出都不发。整段上下文按 `contextChars` 从最早的开始截断，所以长会话不会把请求撑爆。
 
 首字延迟（TTFT）取决于中转站排队，实测同一把 key 从 0.9 秒到 78 秒都出现过，所以默认超时给得宽。`timeoutMs` 是整次上限；`idleTimeoutMs` 只在「已经开始输出、但中途长时间没有新内容」时触发。两者触发都会给出中文原因（`请求超时：超过 N 秒总时长上限` / `等待模型响应超时：N 秒内没有收到新内容`），不会只丢一个 `ABORTED`。
 
@@ -51,7 +57,7 @@ DeepSeek Harness 提示词美化插件：输入框旁一键把草稿改写成更
 | `lib/index.js` | 宿主：注册 `/polish`，解析候选路由，调用 `ctx.llm.stream` 流式收集结果 |
 | `lib/client.js` | 客户端：`conversation.input.left` 槽位里的按钮，读草稿 / 回填 / 撤销 |
 | `cordis.patch.yml` | 往 profile 组合里插一行 `prompt-beautify` |
-| `test/host.test.mjs` | 宿主命令的 node:test 用例（15 个，不需要真实模型） |
+| `test/host.test.mjs` | 宿主命令的 node:test 用例（26 个，不需要真实模型） |
 | `test/client.smoke.mjs` | 客户端 bundle 的离线 smoke 测试（需要 react@18） |
 
 依赖的两个宿主服务：`commands`（斜杠命令表）与 `llm`（provider-neutral 补全服务），二者都在 DSH 默认 composition 里。
@@ -78,6 +84,8 @@ dsh plugin --profile <profile> add dsh-prompt-beautify
 | `美化失败：…（provider/model）` | 该候选路由请求失败，括号里是最后尝试的路由 | 看 code：`AUTH` / `INVALID_CREDENTIAL` 换 key；`NO_ADAPTER` 说明该 provider 没有注册适配器 |
 | 报 `请求超时：超过 N 秒总时长上限` | 模型一直没出内容 | 调大 `timeoutMs`；或固定到更快的 `provider`/`model` |
 | 输入框旁没有 ✨ 按钮 | 客户端 bundle 没随页面加载 | 刷新 Web 页面；仍没有则重启 DeepSeek Harness |
+| 切换模型后美化还是用旧模型 | 0.1.2 及更早只看「最近一次请求头」，切换后要先发一条消息才跟上 | 升级到 0.1.3+（读会话 `modelSelection` 投影，切换后立刻跟随） |
+| 美化结果带上了不该发的上下文 | 0.1.3 起默认读最近 6 轮对话 | 在 profile 里设 `useContext: false`，或调小 `contextRounds` / `contextChars` |
 | 改了 `lib/*.js` 行为没变 | 宿主模块与客户端 bundle 都不热重载 | 重启 App + 刷新页面 |
 
 ## 兼容性
@@ -93,7 +101,7 @@ dsh plugin --profile <profile> add dsh-prompt-beautify
 ## 测试
 
 ```powershell
-node --test test/host.test.mjs              # 宿主命令逻辑，15 个用例，不需要真实模型
+node --test test/host.test.mjs              # 宿主命令逻辑，26 个用例，不需要真实模型
 node test/client.smoke.mjs     # 客户端 bundle：假 slots/remote + react-dom/server 渲染
 ```
 
