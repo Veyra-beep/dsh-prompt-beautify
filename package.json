@@ -14,14 +14,14 @@
     "rewriter"
   ],
   "license": "MIT",
-  "author": "HaoxiangDong (https://github.com/yangyv-beep)",
-  "homepage": "https://github.com/yangyv-beep/dsh-prompt-beautify#readme",
+  "author": "HaoxiangDong (https://github.com/Veyra-beep)",
+  "homepage": "https://github.com/Veyra-beep/dsh-prompt-beautify#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yangyv-beep/dsh-prompt-beautify.git"
+    "url": "git+https://github.com/Veyra-beep/dsh-prompt-beautify.git"
   },
   "bugs": {
-    "url": "https://github.com/yangyv-beep/dsh-prompt-beautify/issues"
+    "url": "https://github.com/Veyra-beep/dsh-prompt-beautify/issues"
   },
   "engines": {
     "node": ">=20"
