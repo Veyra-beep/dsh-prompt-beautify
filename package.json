@@ -1,6 +1,6 @@
 {
   "name": "dsh-prompt-beautify",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "DeepSeek Harness plugin: rewrite a rough composer draft into a clear, structured prompt in place, with a composer button and a /polish command.",
   "keywords": [

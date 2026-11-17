@@ -5,7 +5,7 @@ A DeepSeek Harness plugin that rewrites a rough composer draft into a clear, str
 [中文](./README.md)
 
 - **Never sends, never logs**: neither the button nor the command creates a model message. The draft and the rewrite stay out of the conversation history and cost no main-conversation tokens.
-- **Inherits the current model**: the auxiliary request uses the provider/model of the session's most recent request, falling back to the profile's `agent-default-model` selection.
+- **Inherits the current model**: the auxiliary request prefers the provider/model of the session's most recent request, then the profile's `agent-default-model` selection. Candidate routes are tried in order, so an unusable route falls through to the next one.
 - **Zero third-party dependencies**: the host half only needs the `commands` and `llm` services; the client half is a hand-written lazy CJS bundle that imports no `@deepseek-ai/dsh-client-*` package.
 
 ## Usage
@@ -35,18 +35,23 @@ Override per-row options in the profile's `cordis.patch.yml` (survives upgrades)
     # model: deepseek-v4.1-flash-1017
     maxInputChars: 8000   # reject longer drafts instead of requesting
     maxTokens: 2048       # cap for the rewrite
-    timeoutMs: 45000      # per-request timeout
+    timeoutMs: 180000     # hard ceiling for one rewrite, in ms
+    idleTimeoutMs: 90000  # after output starts, how long with no new text counts as stalled
     # traceFile: C:\path\to\polish.log   # diagnostics: append one line per apply()
 ```
+
+Time to first token depends on the relay's queue: the same key has been measured anywhere between 0.9s and 78s, so the default ceiling is deliberately generous. `timeoutMs` bounds the whole request; `idleTimeoutMs` only fires when output has started but then goes quiet. Either way you get a readable reason (`请求超时：超过 N 秒总时长上限` / `等待模型响应超时：N 秒内没有收到新内容`) instead of a bare `ABORTED`.
+
+Failures name the route that was used, e.g. `美化失败：携带无效凭据（ds/deepseek-v4.1-flash-1017）`. The codes `NO_ADAPTER`, `MISSING_CREDENTIAL`, `INVALID_CREDENTIAL` and `AUTH` first fall through to the next candidate; the command only reports an error once every candidate has failed.
 
 ## Layout
 
 | File | Role |
 |---|---|
-| `lib/index.js` | Host: registers `/polish`, resolves the route, streams `ctx.llm.stream` |
+| `lib/index.js` | Host: registers `/polish`, resolves candidate routes, streams `ctx.llm.stream` |
 | `lib/client.js` | Client: the button in the `conversation.input.left` slot (read draft / write back / undo) |
 | `cordis.patch.yml` | Inserts one `prompt-beautify` row into the profile composition |
-| `test/host.test.mjs` | node:test cases for the command (10, no real model needed) |
+| `test/host.test.mjs` | node:test cases for the command (15, no real model needed) |
 | `test/client.smoke.mjs` | Offline smoke test of the client bundle (needs react@18) |
 
 Required host services are `commands` (slash command registry) and `llm` (provider-neutral completion service); both ship in the default DSH composition.
@@ -65,6 +70,16 @@ Once the package is published to npm, installing by name also works:
 dsh plugin --profile <profile> add dsh-prompt-beautify
 ```
 
+## Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Fails after ~45s with `美化失败：ABORTED: Request aborted` | 0.1.0's hard 45s timeout versus a relay queue that needs 50–80s to first token | Upgrade to 0.1.1+ (default `timeoutMs` is 180000) or raise it in the config |
+| `美化失败：…（provider/model）` | The candidate route failed; the parentheses hold the last route tried | Read the code: switch keys for `AUTH` / `INVALID_CREDENTIAL`; `NO_ADAPTER` means that provider has no registered adapter |
+| `请求超时：超过 N 秒总时长上限` | The model never produced output | Raise `timeoutMs`, or pin a faster `provider`/`model` |
+| No ✨ button next to the composer | The client bundle did not load with the page | Reload the Web page; restart DeepSeek Harness if it still does not appear |
+| Editing `lib/*.js` changes nothing | Neither the host module nor the client bundle hot-reloads | Restart the app and reload the page |
+
 ## Compatibility
 
 Verified against DSH `0.2.0-rc.2` with the Web client; `dsh.compatibility` in `package.json` declares the same floor and the verified release. The plugin imports no Harness core package and only talks to cordis services (`commands`, `llm`, `slots`, `remote.commands`), so it tolerates version drift.
@@ -78,7 +93,7 @@ Verified against DSH `0.2.0-rc.2` with the Web client; `dsh.compatibility` in `p
 ## Tests
 
 ```powershell
-node --test test/              # host command logic, 10 cases, no real model
+node --test test/              # host command logic, 15 cases, no real model
 node test/client.smoke.mjs     # client bundle: fake slots/remote + react-dom/server
 ```
 

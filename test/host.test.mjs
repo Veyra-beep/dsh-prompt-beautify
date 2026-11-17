@@ -20,6 +20,7 @@ function harness(options = {}) {
     llm: {
       stream: (request) => {
         calls.push(request)
+        if (options.stream !== undefined) return options.stream(request)
         const chunks = options.chunks ?? [
           { type: 'text-delta', text: '改写后的提示词' },
           { type: 'finish', reason: { kind: 'stop' } },
@@ -47,7 +48,7 @@ test('plain text after the command name is the draft', async () => {
   assert.equal(calls[0].messages[0].content[0].text, '帮我看下这段代码有什么问题')
   assert.equal(calls[0].provider, 'ds')
   assert.equal(calls[0].model, 'deepseek-v4.1-flash-1017')
-  assert.equal(calls[0].purpose, 'prompt-beautify')
+  assert.equal(calls[0].purpose, 'prompt-polish')
 })
 
 test('base64 payload preserves newlines and indentation', async () => {
@@ -123,4 +124,97 @@ test('one wrapping code fence is stripped from the answer', async () => {
   const result = await command.handler({ agent, rawInput: '测试' })
   assert.equal(result.kind, 'success')
   assert.equal(result.text, '# 目标\n做点什么')
+})
+
+test('the failing route is named in the error text', async () => {
+  const { command } = harness({
+    chunks: [{ type: 'finish', reason: { kind: 'error', failure: { code: 'RATE_LIMIT', message: 'slow down' } } }],
+  })
+  const result = await command.handler({ agent, rawInput: '测试' })
+  assert.equal(result.kind, 'error')
+  assert.match(result.text, /ds\/deepseek-v4\.1-flash-1017/)
+})
+
+test('a route without an adapter falls back to the next candidate', async () => {
+  const seen = []
+  const { command } = harness({
+    defaultModel: { currentSelection: () => ({ provider: 'ds-wen', model: 'fast-model' }) },
+    stream: () => {
+      const first = seen.push(1) === 1
+      const chunks = first
+        ? [{ type: 'finish', reason: { kind: 'error', failure: { code: 'NO_ADAPTER', message: 'no adapter registered for provider "dsh"' } } }]
+        : [
+            { type: 'text-delta', text: '改写后的提示词' },
+            { type: 'finish', reason: { kind: 'stop' } },
+          ]
+      return {
+        async *[Symbol.asyncIterator]() {
+          for (const chunk of chunks) yield chunk
+        },
+      }
+    },
+  })
+  const routes = []
+  const original = command.handler
+  const result = await original({ agent, rawInput: '测试' })
+  assert.equal(result.kind, 'success')
+  assert.equal(result.text, '改写后的提示词')
+  routes.push(seen.length)
+  assert.deepEqual(routes, [2])
+})
+
+test('a stalled provider expires with a readable timeout instead of ABORTED', async () => {
+  const { command } = harness({
+    config: { idleTimeoutMs: 20, timeoutMs: 5000 },
+    stream: () => ({
+      async *[Symbol.asyncIterator]() {
+        await new Promise((resolve) => setTimeout(resolve, 120))
+        yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'Request aborted' } } }
+      },
+    }),
+  })
+  const result = await command.handler({ agent, rawInput: '测试' })
+  assert.equal(result.kind, 'error')
+  assert.match(result.text, /超时/)
+  assert.doesNotMatch(result.text, /ABORTED/)
+})
+
+test('a caller abort is reported as cancelled', async () => {
+  const controller = new AbortController()
+  const { command } = harness({
+    config: { idleTimeoutMs: 0, timeoutMs: 0 },
+    stream: () => ({
+      async *[Symbol.asyncIterator]() {
+        controller.abort()
+        yield { type: 'finish', reason: { kind: 'aborted', failure: { code: 'ABORTED', message: 'Request aborted' } } }
+      },
+    }),
+  })
+  const result = await command.handler({ agent, rawInput: '测试', signal: controller.signal })
+  assert.equal(result.kind, 'error')
+  assert.match(result.text, /取消/)
+})
+test('a rejected credential falls back to the next candidate', async () => {
+  const seen = []
+  const { command } = harness({
+    defaultModel: { currentSelection: () => ({ provider: 'ds', model: 'slow-model' }) },
+    stream: () => {
+      const first = seen.push(1) === 1
+      const chunks = first
+        ? [{ type: 'finish', reason: { kind: 'error', failure: { code: 'AUTH', message: 'invalid api key' } } }]
+        : [
+            { type: 'text-delta', text: '回退成功' },
+            { type: 'finish', reason: { kind: 'stop' } },
+          ]
+      return {
+        async *[Symbol.asyncIterator]() {
+          for (const chunk of chunks) yield chunk
+        },
+      }
+    },
+  })
+  const result = await command.handler({ agent, rawInput: '测试' })
+  assert.equal(result.kind, 'success')
+  assert.equal(result.text, '回退成功')
+  assert.equal(seen.length, 2)
 })
