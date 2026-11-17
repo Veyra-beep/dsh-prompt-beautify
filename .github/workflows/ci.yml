@@ -23,7 +23,7 @@ jobs:
           node --check lib/index.js
           node --check lib/client.js
       - name: Host command tests
-        run: node --test test/
+        run: node --test test/host.test.mjs
       - name: Client bundle smoke test
         run: |
           npm install --no-save --no-package-lock react@18 react-dom@18

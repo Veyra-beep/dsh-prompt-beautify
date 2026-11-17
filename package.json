@@ -58,7 +58,7 @@
     }
   },
   "scripts": {
-    "test": "node --test test/",
+    "test": "node --test test/host.test.mjs",
     "test:client": "node test/client.smoke.mjs",
     "check": "node --check lib/index.js && node --check lib/client.js"
   }

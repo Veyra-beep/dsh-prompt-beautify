@@ -93,7 +93,7 @@ Verified against DSH `0.2.0-rc.2` with the Web client; `dsh.compatibility` in `p
 ## Tests
 
 ```powershell
-node --test test/              # host command logic, 15 cases, no real model
+node --test test/host.test.mjs              # host command logic, 15 cases, no real model
 node test/client.smoke.mjs     # client bundle: fake slots/remote + react-dom/server
 ```
 

@@ -93,7 +93,7 @@ dsh plugin --profile <profile> add dsh-prompt-beautify
 ## 测试
 
 ```powershell
-node --test test/              # 宿主命令逻辑，15 个用例，不需要真实模型
+node --test test/host.test.mjs              # 宿主命令逻辑，15 个用例，不需要真实模型
 node test/client.smoke.mjs     # 客户端 bundle：假 slots/remote + react-dom/server 渲染
 ```
 
