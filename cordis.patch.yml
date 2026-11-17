@@ -1,0 +1,7 @@
+# dsh-prompt-beautify bundle patch: one host row over any profile that carries the
+# commands and llm services. The row name resolves from the profile's own
+# node_modules, where `dsh plugin --profile <profile> add <path>` installed this
+# package.
+- insert:
+    - id: prompt-beautify
+      name: dsh-prompt-beautify

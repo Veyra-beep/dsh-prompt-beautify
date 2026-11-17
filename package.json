@@ -1,0 +1,65 @@
+{
+  "name": "dsh-prompt-beautify",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "DeepSeek Harness plugin: rewrite a rough composer draft into a clear, structured prompt in place, with a composer button and a /polish command.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek",
+    "deepseek-harness",
+    "prompt",
+    "prompt-engineering",
+    "prompt-optimizer",
+    "rewriter"
+  ],
+  "license": "MIT",
+  "author": "Haohao Dong (https://github.com/Smartistian)",
+  "homepage": "https://github.com/Smartistian/dsh-prompt-beautify#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Smartistian/dsh-prompt-beautify.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Smartistian/dsh-prompt-beautify/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    },
+    "compatibility": {
+      "dsh": ">=0.2.0-rc.2",
+      "dshReleases": {
+        "0.2.0-rc.2": "compatible"
+      }
+    }
+  },
+  "scripts": {
+    "test": "node --test test/",
+    "test:client": "node test/client.smoke.mjs",
+    "check": "node --check lib/index.js && node --check lib/client.js"
+  }
+}
