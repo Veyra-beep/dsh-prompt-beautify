@@ -48,7 +48,7 @@ test('plain text after the command name is the draft', async () => {
   assert.equal(calls[0].messages[0].content[0].text, '帮我看下这段代码有什么问题')
   assert.equal(calls[0].provider, 'ds')
   assert.equal(calls[0].model, 'deepseek-v4.1-flash-1017')
-  assert.equal(calls[0].purpose, 'prompt-polish')
+  assert.equal(calls[0].purpose, 'prompt-beautify')
 })
 
 test('base64 payload preserves newlines and indentation', async () => {
